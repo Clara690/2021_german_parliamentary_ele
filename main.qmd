@@ -1,0 +1,391 @@
+---
+title: "Trust and Voting Behavior - A Case Study of the 2021 German Parliamentary Election"
+author: "Yun-Tsz Tsai"
+date: last-modified
+date-format: "MMMM DD, YYYY"
+format: pdf
+editor: visual
+bibliography: reference.bib
+crossref:
+  fig-title: '**Figure**'
+  fig-labels: arabic
+  title-delim: "**.**"
+  tbl-title: '**Table**'
+  tbl-labels: arabic
+number-sections: true
+---
+
+# Introduction
+
+Broadly speaking, the idea of trust can be thought of as the tendency of perceiving others positively. For example, leaving valuable belongings on one's seat in a public space when one has to leave for the toilet. This is what @kaaseInterpersonalTrustPolitical1999 refers to as interpersonal trust. Institutional trust, on the other hand, represents the perceived reliability of institutions such the government of a state. In this study, I focus on a narrower definition of institutional trust and therefore I will use the term "political trust" instead.
+
+Many studies have suggested that political trust is highly related to individuals' political participation [@hoogheComparativeAnalysisRelation2013, @mattilaDoesPoorHealth2020]. Higher political trust is positively related to participation in voting in elections, while for those with lower political trust, they tend to engage more in non-institutional political activities, such as online discussions than voting. In other words, we can probably anticipate that the less political trust an individual has, the less likely they will turn up at the polling booth. 
+
+Besides, if it is true that individuals with higher political trust vote more compared to those with lower political trust, it seems reasonable to assume that political trust will not differ among voters across parties. 
+
+This study aims at investigating the relationship between political trust and voting behavior by looking particularly at the 2021 German parliamentary election. Additionally, it examines whether political trust differs among voters. 
+
+The hypotheses are formulated as follows:
+
+1) For those with low political trust, they are less likely to vote in the election. 
+
+2) For those who did vote, there is no difference in political trust among voters across all parties. 
+
+To test the hypotheses, different statistical models will be employed. The methodology is further elaborated in @sec-method.
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| include: false
+
+library(haven)
+library(dplyr)
+
+ess_de <- haven::read_stata('ESS11.dta') %>% 
+  filter(cntry == 'DE')
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+
+library(forcats)
+# data cleaning
+
+de_filtered <- ess_de %>% 
+  select(vote, prtvgde1, prtvgde2, gndr, agea, trstplt, edulvlb, trstprt, hinctnta) %>% 
+  filter(vote < 3) %>% 
+  mutate(trstplt = zap_missing(trstplt), # politician
+         trstplt = as.integer(trstplt),
+         trstprt = zap_missing(trstprt), # party
+         trstprt = as.integer(trstprt),
+         prtvgde1 = zap_missing(prtvgde1),
+         prtvgde2 = zap_missing(prtvgde2),
+         hinctnta = zap_missing(hinctnta), # household income
+         hinctnta = as.integer(hinctnta),
+         income = case_when(
+           hinctnta %in% 1:3 ~ 'Low',
+           hinctnta %in% 4:7 ~ 'Middle',
+           hinctnta %in% 8:10 ~ 'High',
+           TRUE ~ as.character(hinctnta)
+         ),
+         income = factor(income, levels = c('Low', 'Middle', 'High')),
+         party = ifelse(prtvgde1 == prtvgde2, prtvgde1, NA),
+         ptrst = (trstplt + trstprt) / 2, 
+         vote = zap_missing(vote), 
+         vote = as.numeric(vote),
+         vote = ifelse(vote == 1 , 1, 0),
+         gndr = ifelse(gndr == 1, 'Male', 'Female'), 
+         gndr = relevel(as_factor(gndr), ref = 'Male'),
+         high_edu = ifelse(edulvlb >= 500, 'College', 'No College'), 
+         high_edu = relevel(as_factor(high_edu), 
+                            ref = 'No College'),
+         agea = as.integer(agea)) %>% 
+  filter(!is.na(agea)) %>% 
+  filter(!is.na(ptrst)) %>% 
+  filter(!is.na(high_edu)) %>%
+  filter(!is.na(income))
+
+de_parties <- de_filtered %>% 
+  filter(!is.na(party)) %>%  
+  mutate(
+    party = as.factor(party),
+    party_adj = fct_lump_n(party, 4),
+    party_adj = case_when(
+      party_adj == '1' ~ 'CDU/CSU',
+      party_adj == '2' ~ 'SPD',
+      party_adj == '4' ~ 'Green Party',
+      party_adj == '5' ~ 'FDP',
+      TRUE ~ 'Other'
+    ),
+    party_adj = factor(party_adj, levels = c('CDU/CSU', 'SPD', 'Green Party', 'FDP', 'Other'))
+  )
+
+```
+
+# Data
+To test my hypotheses, I use data from round 11 of the 2023 European Social Survey (ESS). ESS is a cross-national survey conducted every two years and includes a wide range of questions that comprehensively assess various aspects of life. 
+
+The response rate for Germany was 26.7% and the total number of valid respondents are 2420. However, not all of them answered all the questions regarding the interest of the study, and those with incomplete responses were excluded from the analysis. After filtering out missing values, a total of 1961 individuals reported to have voted in the previous national election. Those who did not vote are coded as 0 and those who voted are coded as 1, and household income is recoded to three ordinal variables. 
+
+@tbl-descriptive1 shows the unweighted sample statistics of ESS round 11 for Germany, both overall and by voting or not. The item political trust does not exist in the original dataset. Rather, it is calculated using the average value of the two items - trust in politicians and trust in political parties- with lower values indicating a lack of trust in politics in general. It is clear that the gender ratios for voter and non-voters do not differ greatly (~51% vs. ~49% of women), but political trust of non-voters is `{r} round((4.1 - 2.8)/4.1, 2)`% lower than that of voters. In addition, non-voters are less likely to have received a degree from the higher education system and they earn less compared to voters. 
+
+@tbl-descriptive2 contains descriptive information on German voters by party choice in 2021 parliamentary election. There were 4 majors parties in the German parliament, which are Christian Democratic Union (CDU) and its sister party in Bavarian region, Christian Social Union (CSU), Social Democratic Party (SDP), Green Party and Free Democratic Party (FDP).
+
+The German parliament is elected using a mixed member proportional system, which means voters vote for both their local representative and for a party. Not all respondents were willing to share which parties they had voted for and therefore brings the sample size down to 1024. Some of the respondents were removed for the analysis as they voted for different parties in the election (N = 403). 
+
+Some might argue that this is not the best practice given the considerably number of sample losses. I acknowledge that it is still possible to conduct the analysis without dropping these responses, but to keep the analysis simple and straightforward, considerations of all possible party combinations based on their position on the political spectrum is beyond the scope of this study.
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| label: tbl-descriptive1
+#| tbl-cap: 'Descriptive Statistics for 2021 German Voters and Non-voters'
+
+library(gt)
+library(gtsummary)
+de_filtered %>% select(vote) %>% mutate(N = 1) %>% 
+  mutate(Pct = 100*1/n()) %>% 
+  tbl_summary(by = vote,
+              type = list(N ~ 'continuous',Pct~'continuous'),
+              statistic = list(N~'{sum}',Pct~'{sum}%'),
+               digits=list(N~0,Pct~1),
+              label = list(Pct~'Voted')) %>% 
+  add_overall(last = T) %>% 
+  modify_header(update = all_stat_cols() ~ '{level}') %>% 
+  modify_header(label= ' ') %>% 
+   modify_footnote(update = everything() ~ NA) -> 
+   tbl_top
+
+de_filtered %>% select(vote, gndr, agea, ptrst, high_edu, income) %>% 
+  tbl_summary(by = vote,
+              statistic=list(
+                all_continuous()~'{mean} ({sd})',
+                all_categorical()~'{p}%'),
+              digits=list(
+                all_categorical()~1,
+                all_continuous()~1), 
+              label = list(gndr ~ 'Sex',
+                           agea ~ 'Age',
+                           ptrst ~ 'Political Trust',
+                           high_edu ~ 'Education Level',
+                           income ~ 'Household Income')) %>% 
+  add_overall(col_lab="**Overall**", last=T) %>%
+  modify_header(update=all_stat_cols() ~ "{level}") %>% 
+  modify_header(label="Variable") %>% 
+  modify_footnote(update=all_stat_cols()~NA) -> 
+  tbl_bot
+
+tbl_stack(list(tbl_top,tbl_bot)) %>% 
+  as_gt() %>% 
+  tab_spanner(label = "Voted or Not", columns = c('stat_1','stat_2'),               id = 'vote') %>% 
+  tab_footnote(footnote=md('Mean (SD)'),
+               locations = cells_body(rows = variable %in% c('agea', 'ptrst', columns = 'label'))) %>% 
+  tab_footnote(footnote = md('Political trust corresponds to the average of *Trust in politicians* and *Trust in political parties*.')) %>% 
+  tab_source_note(source_note=md('*Source: 2023 ESS round 11.*')) 
+```
+::: {.landscape}
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| label: tbl-descriptive2
+#| tbl-cap: 'Descriptive Statistics for 2021 German Voters by Party'
+
+de_parties %>% select(party_adj) %>% mutate(N = 1) %>% mutate(Pct = 100*1/n()) %>% 
+  tbl_summary(by = party_adj,
+              type = list(N ~ 'continuous',Pct~'continuous'),
+              statistic=list(N~"{sum}",Pct~"{sum}%"),
+              digits=list(N~0,Pct~1),
+              label = list(Pct~"Vote share")) %>% 
+  add_overall(last=T) %>% 
+  modify_header(update=all_stat_cols() ~ "{level}") %>% 
+  modify_header(label= '') %>% 
+  modify_footnote(update = everything()~NA) -> tbl_top2
+
+de_parties %>% select(party_adj, gndr, agea, ptrst, high_edu, income) %>% 
+  tbl_summary(by= party_adj,
+              statistic = list(
+                all_continuous()~'{mean} ({sd})',
+                all_categorical()~'{p}%'),
+              digits=list(
+                all_categorical()~1,
+                all_continuous()~1),
+              label = list(
+    gndr ~ 'Sex',
+    agea ~ 'Age',
+    ptrst ~ 'Political Trust',
+    high_edu ~ 'Education Level',
+    income ~ 'Household Income'
+  )
+) %>%
+  add_overall(col_lab="**Overall**", last=T) %>%
+  modify_header(update=all_stat_cols() ~ "{level}") %>% 
+  modify_header(label="Variable") %>% 
+  modify_footnote(update=all_stat_cols()~NA) -> 
+  tbl_bot2
+
+tbl_stack(list(tbl_top2,tbl_bot2)) %>% 
+  as_gt() %>% 
+  tab_spanner(label="Party Choice",columns=c("stat_1",'stat_2','stat_3','stat_4'),id='party_adj') 
+  
+```
+:::
+
+# Methods {#sec-method}
+
+To test the aforementioned hypotheses, I employ two different types of statistical models. Binary logistic models for the association between political trust and participating in voting; multinomial logistic regression models for telling whether or not political trust among voters for different parties differ. The dependent variable for the former is voting or not voting, which are coded as 1 and 0 respectively, and party choice for the latter, in which the reference category is s Christian Democratic Unio (CDU) and Christian Social Union (CSU). For both hypotheses, the main independent variable is political trust, and I control for other variables, including sex assigned at birth, age, having a college degree and household income, that are empirically considered important in an analysis of this kind. Finally, an interaction term of college education and political trust is also included.
+
+# Results 
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| include: false
+
+library(lmtest)
+# binary logistic regression model
+models_logistic <- list('A' = glm(vote ~ ptrst,
+                         data = de_filtered, family = 'binomial'),
+               'B' = glm(vote ~ ptrst + gndr + agea + high_edu + 
+                           income,
+                         data = de_filtered, family = 'binomial'), 'C' = glm(vote ~ ptrst + gndr + agea + high_edu + 
+                           income + high_edu:ptrst,
+                         data = de_filtered, family = 'binomial'))
+
+lrt_bin <- lrtest(models_logistic$B, models_logistic$C)
+lrt_m2m3 <- round(lrt_bin$`Pr(>Chisq)`[2],3)
+```
+
+First, we start with models that test the first hypothesis. @tbl-logistic shows the estimated odds ratio from binary logistic regression models. Model A includes political trust as the sole independent variable. All the other control variables are added to Model B and the strong connection between individual's voting behavior and their level of political trust remains robust. Model C further examines the plausible cofounding effects of higher education and political trust. However, not any connection has been established by these models. 
+
+Across the models, Model B and Model C obviously outperform Model A in terms of model fit statistics (shown at the bottom of @tbl-logistic). After conducting a Likelihood Ratio Test (LRT), it is found that the two models do not differ from each other (p = `{r} lrt_m2m3`). Thus, I will focus on the interpretation of coefficients of Model B. 
+
+The results suggest that other being equal, for every one point increase in political interest, the odds of individual voting will increase by 29%. Sex, on the other hand, does not affect one's odds of voting, which imply that for the sample on which the models are built upon, men and women do not differ inherently in their possibility to vote. For the rest of the variables in Model B, all of them are a value greater than 1. This means that for individuals who are older or highly educated, the odds of them voting also increase. Additionally, increasing amount of income also boosts individuals' odds of voting. 
+
+Moving on to the models that examine the second hypothesis. Party choice is the dependent variable in these models. A total of three models were constructed and the independent variables included are exactly the same as what is included for binary logistic regression models. Similarly, adding interaction term of higher education and political trust does not make any significant statistical difference, and therefore only two of the models are presented.
+
+In contrast to the assumption that voting individuals have the same level of political trust collectively, @tbl-multi demonstrates that although trust does not seem to differ among voters for most of the major parties, political trust is what positively related to voting for the Green Parties. However, political trust is negatively associated with voting for non-major parties. Net of sex, age, education and income, 1 point higher in political trust increases one's odds of voting for the Green Party by ~31%, while for 1 point lower in political trust the odds of voting for CDU/CSU decreases by approximately 27%.
+
+Apart from political trust, younger age increases the odds of voting for parties other than CDU/CSU, but the result for SPD is not significant. Having a college degree makes the odds of voting for the Green Party almost 2.5 times higher. Individuals with higher income are much less likely (the odds is 64% lower) to vote for parties other than CDU/CSU. Similar to the discovery from the binary logistics regression models, the odds of men and women voting for a specific party do not differ.
+
+```{r}
+#| label: tbl-logistic
+#| tbl-cap: 'Odds Ratio from Binary Logistic Regression Models of 2021 German  Parliamentary Election'
+#| message: false
+#| warning: false
+#| echo: false
+
+library(gt)
+# rename row names
+names<-c('(Intercept)' = 'Intercept',
+  'high_eduCollege' = 'College Educated (ref: Not)',
+        'agea' = 'Age (years)',
+        'gndrFemale' ='Female (ref: Male)',
+        'ptrst' = 'Political Trust',
+        'ptrst:high_eduCollege' = 'College Educated × Political Trust',
+  'incomeMiddle' = 'Middle Income (ref: Low)',
+  'incomeHigh' = 'High Income')
+
+library(modelsummary)
+
+#  summary table
+modelsummary(models_logistic, exponentiate = TRUE, 
+             stars = c('*' = .05, '**' = .01, '***' = .001), 
+             coef_rename = names, 
+             gof_omit = 'F|RMSE', fmt = 2,
+             statistic = 'conf.int',
+             notes = "95% confidence intervals in brackets.
+             ", output = 'gt') %>% 
+  tab_source_note("Source: Author's calculations using round 11 European Social Survey.")
+
+```
+
+
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| include: false
+
+library(nnet)
+library(broom)
+library(lmtest)
+library(tinytable)
+# multinomial logistic regression model
+
+# model 1 without political trust as an independent variable
+md1 <- multinom(party_adj ~ gndr + agea + high_edu, data = de_parties)
+
+# model 2 political turst as one of the independent variables
+md2 <- multinom(party_adj ~ gndr + agea + high_edu + ptrst, data = de_parties)
+# model 3 interaction between high_edu and political trust
+md3 <- multinom(party_adj ~ gndr + agea + high_edu + ptrst + high_edu:ptrst, data = de_parties)
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| include: false 
+
+library(nnet)
+library(broom)
+library(modelsummary)
+
+models <- list(`1` = multinom(party_adj ~ gndr + agea + high_edu + income, data = de_parties, trace = FALSE),
+                     `2` = multinom(party_adj ~ gndr + agea + high_edu + income + ptrst, data = de_parties, trace = FALSE), 
+                     `3` = multinom(party_adj ~ gndr + agea + high_edu + income + ptrst + high_edu:ptrst, data = de_parties,trace = FALSE))
+ 
+with(models,do.call(lrtest,lapply(names(models),as.name)))
+
+add_logLik<-function(m) {
+  m[["logLik"]]<-logLik(m)
+  return(m)
+}
+
+models<-lapply(models,add_logLik)
+```
+
+::: {.landscape}
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| label: tbl-multi
+#| tbl-cap: 'Odds Ratios from Multinomial Models of Party Vote in 2021 German Parliamentary Election'
+
+subpred.multinom<-function(value,df,m,col,type="probs") {
+  predict(m,type,newdata=mutate(df,across(col,~value)),type=type) |> 
+    as_tibble() |> 
+    summarize(across(everything(),mean))
+}
+
+
+bspred.multinom<-function(m,df,col,n=100) {
+  b<-m$wts
+  b<-b[b!=0]
+  sigma<-vcov(m)
+  mvtnorm::rmvnorm(n=100,mean=b,sigma=sigma)
+  
+  replicate(100,)
+  
+}
+
+# A custom function to add desired fit stats
+glance_custom.multinom<-function(x,...) {
+  out<-broom::glance(x) |> 
+    mutate(logLik=logLik(x)) |> 
+    mutate(BIC=round(BIC(x),1)) |> 
+    mutate(AIC=round(AIC,1))
+}
+
+# Use in modelsummary() to choose fit stats
+mygof<-modelsummary::gof_map |> 
+  mutate(omit = FALSE) |> 
+  slice(match(c("nobs","AIC","BIC","logLik"), raw)) |> 
+  mutate(fmt=ifelse(raw=="logLik",0,fmt))
+
+# force modelsummary to use broom::tidy and broom::glance
+options(modelsummary_get="broom")
+
+modelsummary(models[c(1,2)], 
+              shape=term + statistic ~  model + y.level  , 
+              statistic = "conf.int",
+              stars = c('*' = .05, '**' = .01, '***' = .001), 
+              coef_rename = names,
+              exponentiate = TRUE,
+              gof_map = mygof,
+              notes= "95% confidence intervals in brackets. Reference category for outcome is Christian Democratic Union and its sister party Christian Social Union. SPD = Social Democratic Party; FDP = Free Democratic Party Source: Author's calculations using round 11 European Social Survey.") %>% 
+  theme_tt("resize")
+```
+
+:::
+
+# Discussion
+# Reference 
