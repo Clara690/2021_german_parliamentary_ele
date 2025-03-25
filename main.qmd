@@ -23,7 +23,7 @@ Many studies have suggested that political trust is highly related to individual
 
 Besides, if it is true that individuals with higher political trust vote more compared to those with lower political trust, it seems reasonable to assume that political trust will not differ among voters across parties. 
 
-This study aims at investigating the relationship between political trust and voting behavior by looking particularly at the 2021 German parliamentary election. Additionally, it examines whether political trust differs among voters. 
+This study aims at investigating the relationship between political trust and voting behavior by looking particularly at the 2021 German parliamentary election using dara from Round 11 European Social Survey [@ESS112023]. Additionally, it examines whether political trust differs among voters. 
 
 The hypotheses are formulated as follows:
 
@@ -210,8 +210,12 @@ de_parties %>% select(party_adj, gndr, agea, ptrst, high_edu, income) %>%
 
 tbl_stack(list(tbl_top2,tbl_bot2)) %>% 
   as_gt() %>% 
-  tab_spanner(label="Party Choice",columns=c("stat_1",'stat_2','stat_3','stat_4'),id='party_adj') 
-  
+  tab_spanner(label="Party Choice",columns=c("stat_1",'stat_2','stat_3','stat_4'),id='party_adj') %>% 
+  tab_footnote(footnote=md('Mean (SD)'),
+               locations = cells_body(rows = variable %in% c('agea', 'ptrst', columns = 'label'))) %>% 
+  tab_footnote(footnote = md('Political trust corresponds to the average of *Trust in politicians* and *Trust in political parties*.')) %>% 
+  tab_source_note(source_note = 'The income variable is coverted into three categories. The original data is presented in 10 deciles') %>% 
+  tab_source_note(source_note = md('*Source: 2023 ESS round 11.*')) 
 ```
 :::
 
@@ -387,5 +391,14 @@ modelsummary(models[c(1,2)],
 
 :::
 
-# Discussion
+# Discussion 
+
+The results from binary logistic regression models are not particularly surprising and they align with what many of the previous studies have posited. That is, political trust is positively related to voting in election. From an empirical point of view, it is intuitive that one would like to participate in institutional political activities such as voting if they believe that their vote can actually change something and that the game is not rigged. 
+
+What is surprising is that when looking into political trust among voters across different parties, voters for the Green Party tend to have higher trust in politics than voters for other parties. They also tend to be younger and highly educated. On the contrary, those who did not vote for the 4 major parties generally have less trust in politics and they are younger than CDU/CSU voters. In terms of income, only a few of them are extremely rich (at 8 to 10 decile of the population).
+
+In hindsight, the demographics and the preferences of German voters in 2021 might have revealed the changing political views in the near future.  
+
+
+
 # Reference 
